@@ -8,15 +8,18 @@ export function useSocket() {
   const [isConnected, setIsConnected] = useState(false)
 
   useEffect(() => {
-    // Initialize socket connection
-    const socketInstance = io(process.env.NEXT_PUBLIC_SITE_URL || window.location.origin, {
+    // Initialize socket connection with better Vercel compatibility
+    const socketInstance = io({
       path: "/api/socket/io",
       addTrailingSlash: false,
-      transports: ["websocket", "polling"], // Allow fallback to polling
+      transports: ["polling", "websocket"], // Start with polling, upgrade to websocket if available
       timeout: 20000,
       reconnection: true,
       reconnectionAttempts: 5,
       reconnectionDelay: 1000,
+      reconnectionDelayMax: 5000,
+      maxReconnectionAttempts: 5,
+      forceNew: false,
     })
 
     socketInstance.on("connect", () => {
@@ -41,6 +44,11 @@ export function useSocket() {
 
     socketInstance.on("reconnect_error", (error) => {
       console.error("Socket reconnection error:", error)
+    })
+
+    socketInstance.on("reconnect_failed", () => {
+      console.error("Failed to reconnect to Socket.IO server")
+      setIsConnected(false)
     })
 
     setSocket(socketInstance)
