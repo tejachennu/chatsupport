@@ -1,56 +1,40 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import type React from "react"
+
+import { useState } from "react"
 import { useSocket } from "@/hooks/useSocket"
 import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { Badge } from "@/components/ui/badge"
 
 export default function SocketTestPage() {
-  const { socket, isConnected, connectionError, joinChat, sendMessage } = useSocket()
-  const [messages, setMessages] = useState<any[]>([])
-  const [testMessage, setTestMessage] = useState("")
-  const [sessionId] = useState("test-session-123")
+  const { socket, isConnected, messages, joinSession, sendMessage, getChatHistory } = useSocket()
+  const [sessionId] = useState(`test-${Date.now()}`)
+  const [messageInput, setMessageInput] = useState("")
+  const [userName] = useState("Test User")
+  const [hasJoined, setHasJoined] = useState(false)
 
-  useEffect(() => {
-    if (socket) {
-      socket.on("joined-chat", (data) => {
-        console.log("Joined chat:", data)
-        setMessages((prev) => [...prev, { type: "system", content: `Joined chat: ${data.sessionId}` }])
-      })
-
-      socket.on("new-message", (data) => {
-        console.log("New message:", data)
-        setMessages((prev) => [...prev, { type: "message", ...data }])
-      })
-
-      socket.on("user-typing", (data) => {
-        console.log("User typing:", data)
-        setMessages((prev) => [...prev, { type: "typing", content: `${data.senderName} is typing...` }])
-      })
-
-      return () => {
-        socket.off("joined-chat")
-        socket.off("new-message")
-        socket.off("user-typing")
-      }
-    }
-  }, [socket])
-
-  const handleJoinChat = () => {
-    joinChat(sessionId)
+  const handleJoinSession = () => {
+    joinSession(sessionId, "customer", {
+      name: userName,
+      email: "test@example.com",
+    })
+    setHasJoined(true)
+    getChatHistory(sessionId)
   }
 
   const handleSendMessage = () => {
-    if (testMessage.trim()) {
-      sendMessage({
-        sessionId,
-        content: testMessage,
-        senderType: "customer",
-        senderName: "Test User",
-      })
-      setTestMessage("")
+    if (messageInput.trim() && hasJoined) {
+      sendMessage(sessionId, messageInput, "customer", userName)
+      setMessageInput("")
+    }
+  }
+
+  const handleKeyPress = (e: React.KeyboardEvent) => {
+    if (e.key === "Enter") {
+      handleSendMessage()
     }
   }
 
@@ -58,68 +42,80 @@ export default function SocketTestPage() {
     <div className="container mx-auto p-4 max-w-4xl">
       <Card>
         <CardHeader>
-          <CardTitle>Socket.IO Connection Test</CardTitle>
-          <CardDescription>Test the WebSocket connection and real-time messaging</CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="flex items-center gap-2">
-            <span>Connection Status:</span>
+          <CardTitle className="flex items-center justify-between">
+            WebSocket Connection Test
             <Badge variant={isConnected ? "default" : "destructive"}>
               {isConnected ? "Connected" : "Disconnected"}
             </Badge>
-            {socket && <Badge variant="outline">Socket ID: {socket.id}</Badge>}
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="grid grid-cols-2 gap-4 text-sm">
+            <div>
+              <strong>Socket ID:</strong> {socket?.id || "Not connected"}
+            </div>
+            <div>
+              <strong>Session ID:</strong> {sessionId}
+            </div>
+            <div>
+              <strong>User:</strong> {userName}
+            </div>
+            <div>
+              <strong>Status:</strong> {hasJoined ? "Joined" : "Not joined"}
+            </div>
           </div>
 
-          {connectionError && (
-            <div className="p-3 bg-red-50 border border-red-200 rounded-md">
-              <p className="text-red-700">Connection Error: {connectionError}</p>
-            </div>
+          {!hasJoined && (
+            <Button onClick={handleJoinSession} disabled={!isConnected} className="w-full">
+              Join Test Session
+            </Button>
           )}
 
-          <div className="flex gap-2">
-            <Button onClick={handleJoinChat} disabled={!isConnected}>
-              Join Test Chat
-            </Button>
-          </div>
-
-          <div className="flex gap-2">
-            <Input
-              value={testMessage}
-              onChange={(e) => setTestMessage(e.target.value)}
-              placeholder="Type a test message..."
-              onKeyPress={(e) => e.key === "Enter" && handleSendMessage()}
-            />
-            <Button onClick={handleSendMessage} disabled={!isConnected || !testMessage.trim()}>
-              Send Message
-            </Button>
-          </div>
-
-          <div className="border rounded-md p-4 h-64 overflow-y-auto bg-gray-50">
-            <h3 className="font-semibold mb-2">Messages:</h3>
+          <div className="border rounded-lg p-4 h-64 overflow-y-auto bg-gray-50">
+            <div className="text-sm font-medium mb-2">Messages ({messages.length})</div>
             {messages.length === 0 ? (
-              <p className="text-gray-500">No messages yet...</p>
+              <div className="text-center text-gray-500 py-8">
+                No messages yet. Send a message to test the connection.
+              </div>
             ) : (
               <div className="space-y-2">
                 {messages.map((msg, index) => (
                   <div
                     key={index}
-                    className={`p-2 rounded ${
-                      msg.type === "system" ? "bg-blue-100" : msg.type === "typing" ? "bg-yellow-100" : "bg-white"
+                    className={`p-3 rounded-lg ${
+                      msg.senderType === "customer" ? "bg-blue-100 ml-4" : "bg-green-100 mr-4"
                     }`}
                   >
-                    <div className="text-sm">
-                      {msg.type === "message" && (
-                        <>
-                          <strong>{msg.sender_name}:</strong> {msg.content}
-                          <div className="text-xs text-gray-500">{new Date(msg.timestamp).toLocaleTimeString()}</div>
-                        </>
-                      )}
-                      {msg.type !== "message" && msg.content}
+                    <div className="flex justify-between items-start">
+                      <div>
+                        <div className="font-medium text-sm">{msg.senderName}</div>
+                        <div className="text-sm">{msg.message}</div>
+                      </div>
+                      <div className="text-xs text-gray-500 ml-2">{new Date(msg.timestamp).toLocaleTimeString()}</div>
                     </div>
                   </div>
                 ))}
               </div>
             )}
+          </div>
+
+          <div className="flex gap-2">
+            <Input
+              value={messageInput}
+              onChange={(e) => setMessageInput(e.target.value)}
+              onKeyPress={handleKeyPress}
+              placeholder="Type your message..."
+              disabled={!isConnected || !hasJoined}
+            />
+            <Button onClick={handleSendMessage} disabled={!isConnected || !hasJoined || !messageInput.trim()}>
+              Send
+            </Button>
+          </div>
+
+          <div className="text-xs text-gray-600 space-y-1">
+            <div>• Make sure to join the session first</div>
+            <div>• Messages are saved to the database</div>
+            <div>• Real-time communication via WebSocket</div>
           </div>
         </CardContent>
       </Card>

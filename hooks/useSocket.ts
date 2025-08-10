@@ -1,141 +1,123 @@
 "use client"
 
-import { useEffect, useState, useCallback } from "react"
+import { useEffect, useRef, useState } from "react"
 import { io, type Socket } from "socket.io-client"
 
-export function useSocket() {
-  const [socket, setSocket] = useState<Socket | null>(null)
+interface Message {
+  id: number
+  sessionId: string
+  message: string
+  senderType: "customer" | "agent"
+  senderName: string
+  timestamp: string
+}
+
+interface UseSocketReturn {
+  socket: Socket | null
+  isConnected: boolean
+  messages: Message[]
+  joinSession: (sessionId: string, userType: "customer" | "agent", userData: any) => void
+  sendMessage: (sessionId: string, message: string, senderType: "customer" | "agent", senderName: string) => void
+  sendTyping: (sessionId: string, senderName: string, isTyping: boolean) => void
+  getChatHistory: (sessionId: string) => void
+  endChat: (sessionId: string) => void
+}
+
+export function useSocket(): UseSocketReturn {
+  const socketRef = useRef<Socket | null>(null)
   const [isConnected, setIsConnected] = useState(false)
-  const [connectionError, setConnectionError] = useState<string | null>(null)
+  const [messages, setMessages] = useState<Message[]>([])
 
   useEffect(() => {
-    let socketInstance: Socket
+    // Initialize socket connection
+    socketRef.current = io(process.env.NODE_ENV === "production" ? undefined : "http://localhost:3000", {
+      path: "/api/socketio",
+      addTrailingSlash: false,
+    })
 
-    const initializeSocket = () => {
-      console.log("Initializing socket connection...")
+    const socket = socketRef.current
 
-      socketInstance = io({
-        path: "/api/socket/io",
-        addTrailingSlash: false,
-        transports: ["polling", "websocket"],
-        timeout: 20000,
-        reconnection: true,
-        reconnectionAttempts: 5,
-        reconnectionDelay: 1000,
-        reconnectionDelayMax: 5000,
-        forceNew: false,
-        autoConnect: true,
-      })
+    socket.on("connect", () => {
+      console.log("Connected to server:", socket.id)
+      setIsConnected(true)
+    })
 
-      socketInstance.on("connect", () => {
-        console.log("Connected to Socket.IO server:", socketInstance.id)
-        setIsConnected(true)
-        setConnectionError(null)
-      })
+    socket.on("disconnect", () => {
+      console.log("Disconnected from server")
+      setIsConnected(false)
+    })
 
-      socketInstance.on("disconnect", (reason) => {
-        console.log("Disconnected from Socket.IO server:", reason)
-        setIsConnected(false)
-        if (reason === "io server disconnect") {
-          // Server disconnected, try to reconnect
-          socketInstance.connect()
-        }
-      })
+    socket.on("new-message", (messageData: Message) => {
+      setMessages((prev) => [...prev, messageData])
+    })
 
-      socketInstance.on("connect_error", (error) => {
-        console.error("Socket connection error:", error)
-        setIsConnected(false)
-        setConnectionError(error.message)
-      })
+    socket.on("chat-history", (data) => {
+      setMessages(data.messages)
+    })
 
-      socketInstance.on("reconnect", (attemptNumber) => {
-        console.log("Reconnected to Socket.IO server after", attemptNumber, "attempts")
-        setIsConnected(true)
-        setConnectionError(null)
-      })
+    socket.on("agent-joined", (data) => {
+      console.log("Agent joined:", data)
+    })
 
-      socketInstance.on("reconnect_error", (error) => {
-        console.error("Socket reconnection error:", error)
-        setConnectionError(error.message)
-      })
+    socket.on("customer-waiting", (data) => {
+      console.log("Customer waiting:", data)
+    })
 
-      socketInstance.on("reconnect_failed", () => {
-        console.error("Failed to reconnect to Socket.IO server")
-        setIsConnected(false)
-        setConnectionError("Failed to reconnect to server")
-      })
+    socket.on("user-typing", (data) => {
+      console.log("User typing:", data)
+    })
 
-      setSocket(socketInstance)
-    }
+    socket.on("chat-ended", (data) => {
+      console.log("Chat ended:", data)
+    })
 
-    initializeSocket()
+    socket.on("error", (error) => {
+      console.error("Socket error:", error)
+    })
 
     return () => {
-      if (socketInstance) {
-        console.log("Cleaning up socket connection")
-        socketInstance.disconnect()
-      }
+      socket.disconnect()
     }
   }, [])
 
-  const joinChat = useCallback(
-    (sessionId: string) => {
-      if (socket && isConnected) {
-        console.log("Joining chat:", sessionId)
-        socket.emit("join-chat", sessionId)
-      }
-    },
-    [socket, isConnected],
-  )
+  const joinSession = (sessionId: string, userType: "customer" | "agent", userData: any) => {
+    if (socketRef.current) {
+      socketRef.current.emit("join-session", { sessionId, userType, userData })
+    }
+  }
 
-  const sendMessage = useCallback(
-    (data: {
-      sessionId: string
-      content: string
-      senderType: string
-      senderId?: string
-      senderName?: string
-    }) => {
-      if (socket && isConnected) {
-        console.log("Sending message:", data)
-        socket.emit("send-message", data)
-      }
-    },
-    [socket, isConnected],
-  )
+  const sendMessage = (sessionId: string, message: string, senderType: "customer" | "agent", senderName: string) => {
+    if (socketRef.current && isConnected) {
+      socketRef.current.emit("send-message", { sessionId, message, senderType, senderName })
+    }
+  }
 
-  const startTyping = useCallback(
-    (data: {
-      sessionId: string
-      senderType: string
-      senderName: string
-    }) => {
-      if (socket && isConnected) {
-        socket.emit("typing", data)
-      }
-    },
-    [socket, isConnected],
-  )
+  const sendTyping = (sessionId: string, senderName: string, isTyping: boolean) => {
+    if (socketRef.current && isConnected) {
+      socketRef.current.emit("typing", { sessionId, senderName, isTyping })
+    }
+  }
 
-  const stopTyping = useCallback(
-    (data: {
-      sessionId: string
-      senderType: string
-    }) => {
-      if (socket && isConnected) {
-        socket.emit("stop-typing", data)
-      }
-    },
-    [socket, isConnected],
-  )
+  const getChatHistory = (sessionId: string) => {
+    if (socketRef.current && isConnected) {
+      socketRef.current.emit("get-history", { sessionId })
+    }
+  }
+
+  const endChat = (sessionId: string) => {
+    if (socketRef.current) {
+      socketRef.current.emit("end-chat", { sessionId })
+    }
+  }
 
   return {
-    socket,
+    socket: socketRef.current,
     isConnected,
-    connectionError,
-    joinChat,
+    messages,
+    joinSession,
     sendMessage,
-    startTyping,
-    stopTyping,
+    sendTyping,
+    getChatHistory,
+    endChat,
   }
 }
