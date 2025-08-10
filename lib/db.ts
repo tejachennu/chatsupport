@@ -14,19 +14,20 @@ const dbConfig = {
   insecureAuth: true,
 }
 
-let pool: mysql.Pool | null = null
-
-function getPool() {
-  if (!pool) {
-    pool = mysql.createPool(dbConfig)
-  }
-  return pool
-}
+const pool = mysql.createPool({
+  host: process.env.DB_HOST,
+  port: Number.parseInt(process.env.DB_PORT || "3306"),
+  user: process.env.DB_USER,
+  password: process.env.DB_PASSWORD,
+  database: process.env.DB_NAME,
+  waitForConnections: true,
+  connectionLimit: 10,
+  queueLimit: 0,
+})
 
 export async function query(sql: string, params: any[] = []) {
   try {
-    const connection = getPool()
-    const [results] = await connection.execute(sql, params)
+    const [results] = await pool.execute(sql, params)
     return results
   } catch (error) {
     console.error("Database query error:", error)
@@ -124,8 +125,7 @@ export async function initializeDatabase() {
 
 export async function testConnection() {
   try {
-    const connection = getPool()
-    await connection.execute("SELECT 1")
+    await pool.execute("SELECT 1")
     return { success: true, message: "Database connection successful" }
   } catch (error) {
     console.error("Database connection test failed:", error)
@@ -315,3 +315,5 @@ export async function addChatMessage(sessionId: number, senderType: string, send
     throw error
   }
 }
+
+export default pool
