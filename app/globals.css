@@ -1,8 +1,6 @@
 @import "tailwindcss";
 @import "tw-animate-css";
 
-@custom-variant dark (&:is(.dark *));
-
 :root {
   --background: oklch(1 0 0);
   --foreground: oklch(0.145 0 0);
@@ -123,16 +121,17 @@
   }
 }
 
-/* Custom styles for chat components */
-.chat-popup {
-  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1);
+/* Chat-specific styles */
+.chat-container {
+  height: 400px;
+  overflow-y: auto;
 }
 
 .chat-message {
-  animation: fadeIn 0.3s ease-in;
+  animation: slideIn 0.3s ease-out;
 }
 
-@keyframes fadeIn {
+@keyframes slideIn {
   from {
     opacity: 0;
     transform: translateY(10px);
@@ -143,21 +142,44 @@
   }
 }
 
-.typing-indicator {
-  animation: pulse 1.5s ease-in-out infinite;
+.chat-input {
+  resize: none;
+  min-height: 40px;
+  max-height: 120px;
 }
 
-@keyframes pulse {
-  0%,
-  100% {
-    opacity: 1;
-  }
-  50% {
-    opacity: 0.5;
-  }
+/* Status indicators */
+.status-online {
+  @apply bg-green-500;
 }
 
-/* Scrollbar styling */
+.status-offline {
+  @apply bg-gray-400;
+}
+
+.status-away {
+  @apply bg-yellow-500;
+}
+
+/* Chat widget positioning */
+.chat-widget {
+  position: fixed;
+  bottom: 20px;
+  right: 20px;
+  z-index: 1000;
+}
+
+.chat-popup {
+  position: fixed;
+  bottom: 80px;
+  right: 20px;
+  z-index: 1001;
+  width: 350px;
+  height: 500px;
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.15);
+}
+
+/* Custom scrollbar */
 .chat-messages::-webkit-scrollbar {
   width: 6px;
 }
@@ -175,38 +197,74 @@
   background: hsl(var(--foreground));
 }
 
-/* Status indicators */
-.status-online {
-  @apply bg-green-500;
-}
-
-.status-offline {
-  @apply bg-red-500;
-}
-
-.status-away {
-  @apply bg-yellow-500;
-}
-
-/* Chat widget positioning */
-.chat-widget {
-  position: fixed;
-  bottom: 20px;
-  right: 20px;
-  z-index: 1000;
-}
-
-/* Responsive adjustments */
+/* Responsive design */
 @media (max-width: 768px) {
-  .chat-widget {
-    bottom: 10px;
-    right: 10px;
-  }
-
   .chat-popup {
-    width: calc(100vw - 20px);
-    height: calc(100vh - 40px);
-    max-width: none;
-    max-height: none;
+    width: calc(100vw - 40px);
+    height: calc(100vh - 100px);
+    bottom: 20px;
+    right: 20px;
+    left: 20px;
   }
+}
+
+/* Loading animation */
+.loading-dots {
+  display: inline-flex;
+  gap: 2px;
+}
+
+.loading-dots span {
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background-color: currentColor;
+  animation: loading 1.4s ease-in-out infinite both;
+}
+
+.loading-dots span:nth-child(1) {
+  animation-delay: -0.32s;
+}
+
+.loading-dots span:nth-child(2) {
+  animation-delay: -0.16s;
+}
+
+@keyframes loading {
+  0%,
+  80%,
+  100% {
+    transform: scale(0);
+    opacity: 0.5;
+  }
+  40% {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+/* Connection status */
+.connection-status {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  padding: 4px 8px;
+  border-radius: 12px;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.connection-connected {
+  background-color: #dcfce7;
+  color: #166534;
+}
+
+.connection-disconnected {
+  background-color: #fecaca;
+  color: #991b1b;
+}
+
+.connection-connecting {
+  background-color: #fef3c7;
+  color: #92400e;
 }
