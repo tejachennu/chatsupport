@@ -1,122 +1,155 @@
 "use client"
 
-import type React from "react"
-
 import { useState } from "react"
 import { useSocket } from "@/hooks/useSocket"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Badge } from "@/components/ui/badge"
 
 export default function SocketTestPage() {
-  const { socket, isConnected, messages, joinSession, sendMessage, getChatHistory } = useSocket()
-  const [sessionId] = useState(`test-${Date.now()}`)
-  const [messageInput, setMessageInput] = useState("")
-  const [userName] = useState("Test User")
-  const [hasJoined, setHasJoined] = useState(false)
+  const [sessionId, setSessionId] = useState("test-session-123")
+  const [message, setMessage] = useState("")
+  const [senderName, setSenderName] = useState("Test User")
+  const [senderType, setSenderType] = useState<"agent" | "customer">("customer")
 
-  const handleJoinSession = () => {
-    joinSession(sessionId, "customer", {
-      name: userName,
-      email: "test@example.com",
-    })
-    setHasJoined(true)
-    getChatHistory(sessionId)
-  }
+  const { socket, isConnected, messages, sendMessage, joinSession, startTyping, stopTyping, isTyping, typingUser } =
+    useSocket()
 
   const handleSendMessage = () => {
-    if (messageInput.trim() && hasJoined) {
-      sendMessage(sessionId, messageInput, "customer", userName)
-      setMessageInput("")
+    if (message.trim()) {
+      sendMessage(message, senderType, 1, senderName)
+      setMessage("")
     }
   }
 
-  const handleKeyPress = (e: React.KeyboardEvent) => {
-    if (e.key === "Enter") {
-      handleSendMessage()
+  const handleJoinSession = () => {
+    if (sessionId.trim()) {
+      joinSession(sessionId)
     }
+  }
+
+  const handleTyping = () => {
+    startTyping(senderName)
+    setTimeout(() => stopTyping(), 2000) // Stop typing after 2 seconds
   }
 
   return (
     <div className="container mx-auto p-4 max-w-4xl">
-      <Card>
+      <h1 className="text-3xl font-bold mb-6">Socket.IO Test Page</h1>
+
+      {/* Connection Status */}
+      <Card className="mb-6">
         <CardHeader>
-          <CardTitle className="flex items-center justify-between">
-            WebSocket Connection Test
-            <Badge variant={isConnected ? "default" : "destructive"}>
-              {isConnected ? "Connected" : "Disconnected"}
-            </Badge>
-          </CardTitle>
+          <CardTitle>Connection Status</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div
+            className={`inline-flex items-center px-3 py-1 rounded-full text-sm font-medium ${
+              isConnected ? "bg-green-100 text-green-800" : "bg-red-100 text-red-800"
+            }`}
+          >
+            <div className={`w-2 h-2 rounded-full mr-2 ${isConnected ? "bg-green-500" : "bg-red-500"}`} />
+            {isConnected ? "Connected" : "Disconnected"}
+          </div>
+          {socket && <p className="text-sm text-gray-600 mt-2">Socket ID: {socket.id}</p>}
+        </CardContent>
+      </Card>
+
+      {/* Session Controls */}
+      <Card className="mb-6">
+        <CardHeader>
+          <CardTitle>Session Controls</CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
-          <div className="grid grid-cols-2 gap-4 text-sm">
-            <div>
-              <strong>Socket ID:</strong> {socket?.id || "Not connected"}
-            </div>
-            <div>
-              <strong>Session ID:</strong> {sessionId}
-            </div>
-            <div>
-              <strong>User:</strong> {userName}
-            </div>
-            <div>
-              <strong>Status:</strong> {hasJoined ? "Joined" : "Not joined"}
-            </div>
+          <div className="flex gap-2">
+            <Input placeholder="Session ID" value={sessionId} onChange={(e) => setSessionId(e.target.value)} />
+            <Button onClick={handleJoinSession} disabled={!isConnected}>
+              Join Session
+            </Button>
           </div>
 
-          {!hasJoined && (
-            <Button onClick={handleJoinSession} disabled={!isConnected} className="w-full">
-              Join Test Session
-            </Button>
-          )}
+          <div className="flex gap-2">
+            <Input placeholder="Your name" value={senderName} onChange={(e) => setSenderName(e.target.value)} />
+            <select
+              value={senderType}
+              onChange={(e) => setSenderType(e.target.value as "agent" | "customer")}
+              className="px-3 py-2 border border-gray-300 rounded-md"
+            >
+              <option value="customer">Customer</option>
+              <option value="agent">Agent</option>
+            </select>
+          </div>
+        </CardContent>
+      </Card>
 
-          <div className="border rounded-lg p-4 h-64 overflow-y-auto bg-gray-50">
-            <div className="text-sm font-medium mb-2">Messages ({messages.length})</div>
+      {/* Messages */}
+      <Card className="mb-6">
+        <CardHeader>
+          <CardTitle>Messages</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="h-64 overflow-y-auto border rounded-md p-4 mb-4 bg-gray-50">
             {messages.length === 0 ? (
-              <div className="text-center text-gray-500 py-8">
-                No messages yet. Send a message to test the connection.
-              </div>
+              <p className="text-gray-500 text-center">No messages yet...</p>
             ) : (
-              <div className="space-y-2">
-                {messages.map((msg, index) => (
-                  <div
-                    key={index}
-                    className={`p-3 rounded-lg ${
-                      msg.senderType === "customer" ? "bg-blue-100 ml-4" : "bg-green-100 mr-4"
-                    }`}
-                  >
-                    <div className="flex justify-between items-start">
-                      <div>
-                        <div className="font-medium text-sm">{msg.senderName}</div>
-                        <div className="text-sm">{msg.message}</div>
-                      </div>
-                      <div className="text-xs text-gray-500 ml-2">{new Date(msg.timestamp).toLocaleTimeString()}</div>
-                    </div>
+              messages.map((msg, index) => (
+                <div
+                  key={index}
+                  className={`mb-2 p-2 rounded-md ${
+                    msg.senderType === "customer"
+                      ? "bg-blue-100 text-blue-900 ml-8"
+                      : "bg-green-100 text-green-900 mr-8"
+                  }`}
+                >
+                  <div className="font-semibold text-xs mb-1">
+                    {msg.senderName} ({msg.senderType})
                   </div>
-                ))}
-              </div>
+                  <div>{msg.content}</div>
+                  <div className="text-xs text-gray-500 mt-1">{new Date(msg.timestamp).toLocaleTimeString()}</div>
+                </div>
+              ))
             )}
+
+            {isTyping && typingUser && <div className="text-gray-500 italic text-sm">{typingUser} is typing...</div>}
           </div>
 
           <div className="flex gap-2">
             <Input
-              value={messageInput}
-              onChange={(e) => setMessageInput(e.target.value)}
-              onKeyPress={handleKeyPress}
-              placeholder="Type your message..."
-              disabled={!isConnected || !hasJoined}
+              placeholder="Type a message..."
+              value={message}
+              onChange={(e) => setMessage(e.target.value)}
+              onKeyPress={(e) => e.key === "Enter" && handleSendMessage()}
             />
-            <Button onClick={handleSendMessage} disabled={!isConnected || !hasJoined || !messageInput.trim()}>
+            <Button onClick={handleSendMessage} disabled={!isConnected || !message.trim()}>
               Send
             </Button>
+            <Button onClick={handleTyping} disabled={!isConnected} variant="outline">
+              Test Typing
+            </Button>
           </div>
+        </CardContent>
+      </Card>
 
-          <div className="text-xs text-gray-600 space-y-1">
-            <div>• Make sure to join the session first</div>
-            <div>• Messages are saved to the database</div>
-            <div>• Real-time communication via WebSocket</div>
-          </div>
+      {/* Debug Info */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Debug Information</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <pre className="text-xs bg-gray-100 p-4 rounded-md overflow-auto">
+            {JSON.stringify(
+              {
+                isConnected,
+                socketId: socket?.id,
+                messagesCount: messages.length,
+                isTyping,
+                typingUser,
+                sessionId,
+              },
+              null,
+              2,
+            )}
+          </pre>
         </CardContent>
       </Card>
     </div>

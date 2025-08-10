@@ -1,123 +1,130 @@
 "use client"
 
-import { useEffect, useRef, useState } from "react"
+import { useEffect, useState, useRef } from "react"
 import { io, type Socket } from "socket.io-client"
 
 interface Message {
   id: number
-  sessionId: string
-  message: string
-  senderType: "customer" | "agent"
+  content: string
+  senderType: "agent" | "customer"
   senderName: string
-  timestamp: string
+  timestamp: Date
 }
 
 interface UseSocketReturn {
   socket: Socket | null
   isConnected: boolean
   messages: Message[]
-  joinSession: (sessionId: string, userType: "customer" | "agent", userData: any) => void
-  sendMessage: (sessionId: string, message: string, senderType: "customer" | "agent", senderName: string) => void
-  sendTyping: (sessionId: string, senderName: string, isTyping: boolean) => void
-  getChatHistory: (sessionId: string) => void
-  endChat: (sessionId: string) => void
+  sendMessage: (content: string, senderType: "agent" | "customer", senderId: number, senderName: string) => void
+  joinSession: (sessionId: string) => void
+  startTyping: (senderName: string) => void
+  stopTyping: () => void
+  isTyping: boolean
+  typingUser: string | null
 }
 
-export function useSocket(): UseSocketReturn {
-  const socketRef = useRef<Socket | null>(null)
+export const useSocket = (sessionId?: string): UseSocketReturn => {
+  const [socket, setSocket] = useState<Socket | null>(null)
   const [isConnected, setIsConnected] = useState(false)
   const [messages, setMessages] = useState<Message[]>([])
+  const [isTyping, setIsTyping] = useState(false)
+  const [typingUser, setTypingUser] = useState<string | null>(null)
+  const currentSessionId = useRef<string | null>(null)
 
   useEffect(() => {
-    // Initialize socket connection
-    socketRef.current = io(process.env.NODE_ENV === "production" ? undefined : "http://localhost:3000", {
+    const socketInstance = io(process.env.NODE_ENV === "production" ? "" : "http://localhost:3000", {
       path: "/api/socketio",
       addTrailingSlash: false,
+      transports: ["polling", "websocket"],
     })
 
-    const socket = socketRef.current
-
-    socket.on("connect", () => {
-      console.log("Connected to server:", socket.id)
+    socketInstance.on("connect", () => {
+      console.log("Connected to socket server")
       setIsConnected(true)
     })
 
-    socket.on("disconnect", () => {
-      console.log("Disconnected from server")
+    socketInstance.on("disconnect", () => {
+      console.log("Disconnected from socket server")
       setIsConnected(false)
     })
 
-    socket.on("new-message", (messageData: Message) => {
-      setMessages((prev) => [...prev, messageData])
+    socketInstance.on("new-message", (message: Message) => {
+      setMessages((prev) => [...prev, message])
     })
 
-    socket.on("chat-history", (data) => {
-      setMessages(data.messages)
+    socketInstance.on("user-typing", (data: { senderName: string }) => {
+      setIsTyping(true)
+      setTypingUser(data.senderName)
     })
 
-    socket.on("agent-joined", (data) => {
-      console.log("Agent joined:", data)
+    socketInstance.on("user-stopped-typing", () => {
+      setIsTyping(false)
+      setTypingUser(null)
     })
 
-    socket.on("customer-waiting", (data) => {
-      console.log("Customer waiting:", data)
+    socketInstance.on("error", (error: { message: string }) => {
+      console.error("Socket error:", error.message)
     })
 
-    socket.on("user-typing", (data) => {
-      console.log("User typing:", data)
-    })
-
-    socket.on("chat-ended", (data) => {
-      console.log("Chat ended:", data)
-    })
-
-    socket.on("error", (error) => {
-      console.error("Socket error:", error)
-    })
+    setSocket(socketInstance)
 
     return () => {
-      socket.disconnect()
+      socketInstance.disconnect()
     }
   }, [])
 
-  const joinSession = (sessionId: string, userType: "customer" | "agent", userData: any) => {
-    if (socketRef.current) {
-      socketRef.current.emit("join-session", { sessionId, userType, userData })
+  const joinSession = (sessionId: string) => {
+    if (socket && sessionId) {
+      socket.emit("join-session", sessionId)
+      currentSessionId.current = sessionId
     }
   }
 
-  const sendMessage = (sessionId: string, message: string, senderType: "customer" | "agent", senderName: string) => {
-    if (socketRef.current && isConnected) {
-      socketRef.current.emit("send-message", { sessionId, message, senderType, senderName })
+  const sendMessage = (content: string, senderType: "agent" | "customer", senderId: number, senderName: string) => {
+    if (socket && currentSessionId.current) {
+      socket.emit("send-message", {
+        sessionId: currentSessionId.current,
+        senderType,
+        senderId,
+        content,
+        senderName,
+      })
     }
   }
 
-  const sendTyping = (sessionId: string, senderName: string, isTyping: boolean) => {
-    if (socketRef.current && isConnected) {
-      socketRef.current.emit("typing", { sessionId, senderName, isTyping })
+  const startTyping = (senderName: string) => {
+    if (socket && currentSessionId.current) {
+      socket.emit("typing", {
+        sessionId: currentSessionId.current,
+        senderName,
+      })
     }
   }
 
-  const getChatHistory = (sessionId: string) => {
-    if (socketRef.current && isConnected) {
-      socketRef.current.emit("get-history", { sessionId })
+  const stopTyping = () => {
+    if (socket && currentSessionId.current) {
+      socket.emit("stop-typing", {
+        sessionId: currentSessionId.current,
+      })
     }
   }
 
-  const endChat = (sessionId: string) => {
-    if (socketRef.current) {
-      socketRef.current.emit("end-chat", { sessionId })
+  // Auto-join session if provided
+  useEffect(() => {
+    if (socket && sessionId && isConnected) {
+      joinSession(sessionId)
     }
-  }
+  }, [socket, sessionId, isConnected])
 
   return {
-    socket: socketRef.current,
+    socket,
     isConnected,
     messages,
-    joinSession,
     sendMessage,
-    sendTyping,
-    getChatHistory,
-    endChat,
+    joinSession,
+    startTyping,
+    stopTyping,
+    isTyping,
+    typingUser,
   }
 }
