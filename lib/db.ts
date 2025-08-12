@@ -81,6 +81,7 @@ export async function initializeDatabase() {
         started_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         ended_at TIMESTAMP NULL,
         status ENUM('active', 'ended') DEFAULT 'active',
+        status ENUM('active', 'ended') DEFAULT 'active',
         INDEX idx_agent_id (agent_id),
         INDEX idx_customer_id (customer_id)
       )
@@ -112,6 +113,7 @@ export async function initializeDatabase() {
       )
     `)
 
+    console.log("Database tables initialized successfully")
     console.log("Database tables initialized successfully")
   } catch (error) {
     console.error("Error initializing database:", error)
@@ -154,6 +156,28 @@ export async function endChatSession(sessionId: number) {
   }
 
   return Array.isArray(session) ? session[0] : null
+}
+
+// Helper function to create or get customer
+export async function createOrGetCustomer(name: string, email: string) {
+  try {
+    // Check if customer exists
+    const existingCustomers = await query(`SELECT * FROM customers WHERE email = ?`, [email])
+
+    if (Array.isArray(existingCustomers) && existingCustomers.length > 0) {
+      return existingCustomers[0]
+    }
+
+    // Create new customer
+    const result = await query(`INSERT INTO customers (name, email) VALUES (?, ?)`, [name, email])
+
+    const newCustomers = await query(`SELECT * FROM customers WHERE id = ?`, [(result as any).insertId])
+
+    return Array.isArray(newCustomers) && newCustomers.length > 0 ? newCustomers[0] : null
+  } catch (error) {
+    console.error("Error creating/getting customer:", error)
+    throw error
+  }
 }
 
 // Alternative direct connection method (like your example)

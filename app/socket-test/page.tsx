@@ -1,126 +1,155 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useState } from "react"
 import { useSocket } from "@/hooks/useSocket"
 import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 
 export default function SocketTestPage() {
-  const { socket, isConnected, connectionError, joinChat, sendMessage } = useSocket()
-  const [messages, setMessages] = useState<any[]>([])
-  const [testMessage, setTestMessage] = useState("")
-  const [sessionId] = useState("test-session-123")
+  const [sessionId, setSessionId] = useState("test-session-123")
+  const [message, setMessage] = useState("")
+  const [senderName, setSenderName] = useState("Test User")
+  const [senderType, setSenderType] = useState<"agent" | "customer">("customer")
 
-  useEffect(() => {
-    if (socket) {
-      socket.on("joined-chat", (data) => {
-        console.log("Joined chat:", data)
-        setMessages((prev) => [...prev, { type: "system", content: `Joined chat: ${data.sessionId}` }])
-      })
-
-      socket.on("new-message", (data) => {
-        console.log("New message:", data)
-        setMessages((prev) => [...prev, { type: "message", ...data }])
-      })
-
-      socket.on("user-typing", (data) => {
-        console.log("User typing:", data)
-        setMessages((prev) => [...prev, { type: "typing", content: `${data.senderName} is typing...` }])
-      })
-
-      return () => {
-        socket.off("joined-chat")
-        socket.off("new-message")
-        socket.off("user-typing")
-      }
-    }
-  }, [socket])
-
-  const handleJoinChat = () => {
-    joinChat(sessionId)
-  }
+  const { socket, isConnected, messages, sendMessage, joinSession, startTyping, stopTyping, isTyping, typingUser } =
+    useSocket()
 
   const handleSendMessage = () => {
-    if (testMessage.trim()) {
-      sendMessage({
-        sessionId,
-        content: testMessage,
-        senderType: "customer",
-        senderName: "Test User",
-      })
-      setTestMessage("")
+    if (message.trim()) {
+      sendMessage(message, senderType, 1, senderName)
+      setMessage("")
     }
+  }
+
+  const handleJoinSession = () => {
+    if (sessionId.trim()) {
+      joinSession(sessionId)
+    }
+  }
+
+  const handleTyping = () => {
+    startTyping(senderName)
+    setTimeout(() => stopTyping(), 2000) // Stop typing after 2 seconds
   }
 
   return (
     <div className="container mx-auto p-4 max-w-4xl">
-      <Card>
+      <h1 className="text-3xl font-bold mb-6">Socket.IO Test Page</h1>
+
+      {/* Connection Status */}
+      <Card className="mb-6">
         <CardHeader>
-          <CardTitle>Socket.IO Connection Test</CardTitle>
-          <CardDescription>Test the WebSocket connection and real-time messaging</CardDescription>
+          <CardTitle>Connection Status</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div
+            className={`inline-flex items-center px-3 py-1 rounded-full text-sm font-medium ${
+              isConnected ? "bg-green-100 text-green-800" : "bg-red-100 text-red-800"
+            }`}
+          >
+            <div className={`w-2 h-2 rounded-full mr-2 ${isConnected ? "bg-green-500" : "bg-red-500"}`} />
+            {isConnected ? "Connected" : "Disconnected"}
+          </div>
+          {socket && <p className="text-sm text-gray-600 mt-2">Socket ID: {socket.id}</p>}
+        </CardContent>
+      </Card>
+
+      {/* Session Controls */}
+      <Card className="mb-6">
+        <CardHeader>
+          <CardTitle>Session Controls</CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
-          <div className="flex items-center gap-2">
-            <span>Connection Status:</span>
-            <Badge variant={isConnected ? "default" : "destructive"}>
-              {isConnected ? "Connected" : "Disconnected"}
-            </Badge>
-            {socket && <Badge variant="outline">Socket ID: {socket.id}</Badge>}
+          <div className="flex gap-2">
+            <Input placeholder="Session ID" value={sessionId} onChange={(e) => setSessionId(e.target.value)} />
+            <Button onClick={handleJoinSession} disabled={!isConnected}>
+              Join Session
+            </Button>
           </div>
 
-          {connectionError && (
-            <div className="p-3 bg-red-50 border border-red-200 rounded-md">
-              <p className="text-red-700">Connection Error: {connectionError}</p>
-            </div>
-          )}
-
           <div className="flex gap-2">
-            <Button onClick={handleJoinChat} disabled={!isConnected}>
-              Join Test Chat
-            </Button>
+            <Input placeholder="Your name" value={senderName} onChange={(e) => setSenderName(e.target.value)} />
+            <select
+              value={senderType}
+              onChange={(e) => setSenderType(e.target.value as "agent" | "customer")}
+              className="px-3 py-2 border border-gray-300 rounded-md"
+            >
+              <option value="customer">Customer</option>
+              <option value="agent">Agent</option>
+            </select>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Messages */}
+      <Card className="mb-6">
+        <CardHeader>
+          <CardTitle>Messages</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="h-64 overflow-y-auto border rounded-md p-4 mb-4 bg-gray-50">
+            {messages.length === 0 ? (
+              <p className="text-gray-500 text-center">No messages yet...</p>
+            ) : (
+              messages.map((msg, index) => (
+                <div
+                  key={index}
+                  className={`mb-2 p-2 rounded-md ${
+                    msg.senderType === "customer"
+                      ? "bg-blue-100 text-blue-900 ml-8"
+                      : "bg-green-100 text-green-900 mr-8"
+                  }`}
+                >
+                  <div className="font-semibold text-xs mb-1">
+                    {msg.senderName} ({msg.senderType})
+                  </div>
+                  <div>{msg.content}</div>
+                  <div className="text-xs text-gray-500 mt-1">{new Date(msg.timestamp).toLocaleTimeString()}</div>
+                </div>
+              ))
+            )}
+
+            {isTyping && typingUser && <div className="text-gray-500 italic text-sm">{typingUser} is typing...</div>}
           </div>
 
           <div className="flex gap-2">
             <Input
-              value={testMessage}
-              onChange={(e) => setTestMessage(e.target.value)}
-              placeholder="Type a test message..."
+              placeholder="Type a message..."
+              value={message}
+              onChange={(e) => setMessage(e.target.value)}
               onKeyPress={(e) => e.key === "Enter" && handleSendMessage()}
             />
-            <Button onClick={handleSendMessage} disabled={!isConnected || !testMessage.trim()}>
-              Send Message
+            <Button onClick={handleSendMessage} disabled={!isConnected || !message.trim()}>
+              Send
+            </Button>
+            <Button onClick={handleTyping} disabled={!isConnected} variant="outline">
+              Test Typing
             </Button>
           </div>
+        </CardContent>
+      </Card>
 
-          <div className="border rounded-md p-4 h-64 overflow-y-auto bg-gray-50">
-            <h3 className="font-semibold mb-2">Messages:</h3>
-            {messages.length === 0 ? (
-              <p className="text-gray-500">No messages yet...</p>
-            ) : (
-              <div className="space-y-2">
-                {messages.map((msg, index) => (
-                  <div
-                    key={index}
-                    className={`p-2 rounded ${
-                      msg.type === "system" ? "bg-blue-100" : msg.type === "typing" ? "bg-yellow-100" : "bg-white"
-                    }`}
-                  >
-                    <div className="text-sm">
-                      {msg.type === "message" && (
-                        <>
-                          <strong>{msg.sender_name}:</strong> {msg.content}
-                          <div className="text-xs text-gray-500">{new Date(msg.timestamp).toLocaleTimeString()}</div>
-                        </>
-                      )}
-                      {msg.type !== "message" && msg.content}
-                    </div>
-                  </div>
-                ))}
-              </div>
+      {/* Debug Info */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Debug Information</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <pre className="text-xs bg-gray-100 p-4 rounded-md overflow-auto">
+            {JSON.stringify(
+              {
+                isConnected,
+                socketId: socket?.id,
+                messagesCount: messages.length,
+                isTyping,
+                typingUser,
+                sessionId,
+              },
+              null,
+              2,
             )}
-          </div>
+          </pre>
         </CardContent>
       </Card>
     </div>

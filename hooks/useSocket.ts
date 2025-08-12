@@ -1,138 +1,140 @@
 "use client"
 
-import { useEffect, useState, useCallback } from "react"
+import { useEffect, useState, useRef } from "react"
 import { io, type Socket } from "socket.io-client"
 
-export function useSocket() {
+interface Message {
+  id: number
+  content: string
+  senderType: "agent" | "customer"
+  senderName: string
+  timestamp: Date
+}
+
+interface UseSocketReturn {
+  socket: Socket | null
+  isConnected: boolean
+  messages: Message[]
+  sendMessage: (content: string, senderType: "agent" | "customer", senderId: number, senderName: string) => void
+  joinSession: (sessionId: string) => void
+  startTyping: (senderName: string, senderType: "agent" | "customer") => void
+  stopTyping: (senderType: "agent" | "customer") => void
+  isTyping: boolean
+  typingUser: string | null
+}
+
+export const useSocket = (sessionId?: string): UseSocketReturn => {
   const [socket, setSocket] = useState<Socket | null>(null)
   const [isConnected, setIsConnected] = useState(false)
-  const [connectionError, setConnectionError] = useState<string | null>(null)
+  const [messages, setMessages] = useState<Message[]>([])
+  const [isTyping, setIsTyping] = useState(false)
+  const [typingUser, setTypingUser] = useState<string | null>(null)
+  const currentSessionId = useRef<string | null>(null)
 
   useEffect(() => {
-    let socketInstance: Socket
-    const initializeSocket = () => {
-      console.log("Initializing socket connection...")
+    const socketInstance: Socket = io("http://localhost:3001", {
+      transports: ["websocket", "polling"],
+      timeout: 20000,
+      reconnection: true,
+      reconnectionAttempts: 5,
+      reconnectionDelay: 1000,
+      reconnectionDelayMax: 5000,
+      autoConnect: true,
+    })
 
-      socketInstance = io("http://localhost:3001", {
-  transports: ["polling", "websocket"],
-  timeout: 20000,
-  reconnection: true,
-  reconnectionAttempts: 5,
-  reconnectionDelay: 1000,
-  reconnectionDelayMax: 5000,
-  forceNew: false,
-  autoConnect: true,
-})
+    socketInstance.on("connect", () => {
+      console.log("✅ Connected to socket")
+      setIsConnected(true)
+    })
 
+    socketInstance.on("disconnect", (reason) => {
+      console.warn("❌ Disconnected from socket:", reason)
+      setIsConnected(false)
+    })
 
-      socketInstance.on("connect", () => {
-        console.log("Connected to Socket.IO server:", socketInstance.id)
-        setIsConnected(true)
-        setConnectionError(null)
-      })
+    socketInstance.on("new-message", (message: Message) => {
+      setMessages((prev) => [...prev, message])
+    })
 
-      socketInstance.on("disconnect", (reason) => {
-        console.log("Disconnected from Socket.IO server:", reason)
-        setIsConnected(false)
-        if (reason === "io server disconnect") {
-          socketInstance.connect()
-        }
-      })
+    socketInstance.on("user-typing", ({ senderName }) => {
+      setTypingUser(senderName)
+      setIsTyping(true)
+    })
 
-      socketInstance.on("connect_error", (error) => {
-        console.error("Socket connection error:", error)
-        setIsConnected(false)
-        setConnectionError(error.message)
-      })
+    socketInstance.on("user-stop-typing", () => {
+      setTypingUser(null)
+      setIsTyping(false)
+    })
 
-      socketInstance.on("reconnect", (attemptNumber) => {
-        console.log("Reconnected to Socket.IO server after", attemptNumber, "attempts")
-        setIsConnected(true)
-        setConnectionError(null)
-      })
+    socketInstance.on("error", (error: { message: string }) => {
+      console.error("Socket error:", error.message)
+    })
 
-      socketInstance.on("reconnect_error", (error) => {
-        console.error("Socket reconnection error:", error)
-        setConnectionError(error.message)
-      })
-
-      socketInstance.on("reconnect_failed", () => {
-        console.error("Failed to reconnect to Socket.IO server")
-        setIsConnected(false)
-        setConnectionError("Failed to reconnect to server")
-      })
-
-      setSocket(socketInstance)
-    }
-
-    initializeSocket()
+    setSocket(socketInstance)
 
     return () => {
-      if (socketInstance) {
-        console.log("Cleaning up socket connection")
-        socketInstance.disconnect()
-      }
+      socketInstance.disconnect()
     }
   }, [])
 
-  const joinChat = useCallback(
-    (sessionId: string) => {
-      if (socket && isConnected) {
-        console.log("Joining chat:", sessionId)
-        socket.emit("join-chat", sessionId)
-      }
-    },
-    [socket, isConnected],
-  )
+  const joinSession = (sessionId: string) => {
+    if (socket && sessionId) {
+      socket.emit("join-session", sessionId)
+      currentSessionId.current = sessionId
+    }
+  }
 
-  const sendMessage = useCallback(
-    (data: {
-      sessionId: string
-      content: string
-      senderType: string
-      senderId?: string
-      senderName?: string
-    }) => {
-      if (socket && isConnected) {
-        console.log("Sending message:", data)
-        socket.emit("send-message", data)
-      }
-    },
-    [socket, isConnected],
-  )
+  const sendMessage = (
+    content: string,
+    senderType: "agent" | "customer",
+    senderId: number,
+    senderName: string
+  ) => {
+    if (socket && currentSessionId.current) {
+      socket.emit("send-message", {
+        sessionId: currentSessionId.current,
+        senderType,
+        senderId,
+        content,
+        senderName,
+      })
+    }
+  }
 
-  const startTyping = useCallback(
-    (data: {
-      sessionId: string
-      senderType: string
-      senderName: string
-    }) => {
-      if (socket && isConnected) {
-        socket.emit("typing", data)
-      }
-    },
-    [socket, isConnected],
-  )
+  const startTyping = (senderName: string, senderType: "agent" | "customer") => {
+    if (socket && currentSessionId.current) {
+      socket.emit("typing", {
+        sessionId: currentSessionId.current,
+        senderName,
+        senderType,
+      })
+    }
+  }
 
-  const stopTyping = useCallback(
-    (data: {
-      sessionId: string
-      senderType: string
-    }) => {
-      if (socket && isConnected) {
-        socket.emit("stop-typing", data)
-      }
-    },
-    [socket, isConnected],
-  )
+  const stopTyping = (senderType: "agent" | "customer") => {
+    if (socket && currentSessionId.current) {
+      socket.emit("stop-typing", {
+        sessionId: currentSessionId.current,
+        senderType,
+      })
+    }
+  }
+
+  useEffect(() => {
+    if (socket && sessionId && isConnected) {
+      joinSession(sessionId)
+    }
+  }, [socket, sessionId, isConnected])
 
   return {
     socket,
     isConnected,
-    connectionError,
-    joinChat,
+    messages,
     sendMessage,
+    joinSession,
     startTyping,
     stopTyping,
+    isTyping,
+    typingUser,
   }
 }

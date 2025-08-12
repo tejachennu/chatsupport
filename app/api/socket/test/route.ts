@@ -1,5 +1,6 @@
-import { type NextRequest, NextResponse } from "next/server"
+import { NextResponse } from "next/server"
 
+<<<<<<< HEAD
 export async function GET(request: NextRequest) {
   try {
     // Test if the Socket.IO endpoint is accessible
@@ -22,4 +23,12 @@ export async function GET(request: NextRequest) {
       { status: 500 },
     )
   }
+=======
+export async function GET() {
+  return NextResponse.json({
+    message: "Socket.IO test endpoint",
+    timestamp: new Date().toISOString(),
+    socketPath: "/api/socket/io",
+  })
+>>>>>>> 1155a43c51c98e8f0e412330456c9fd5701ca5e8
 }
