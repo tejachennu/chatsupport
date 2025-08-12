@@ -137,6 +137,7 @@ export default function ChatInterface() {
         content: newMessage,
         senderType: "customer",
         senderId: chatSession.customer_id,
+        senderName: chatSession.customer_name, // ✅ Add this line
       })
 
       setNewMessage("")

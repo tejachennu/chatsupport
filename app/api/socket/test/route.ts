@@ -3,8 +3,7 @@ import { type NextRequest, NextResponse } from "next/server"
 export async function GET(request: NextRequest) {
   try {
     // Test if the Socket.IO endpoint is accessible
-    const baseUrl = request.nextUrl.origin
-    const socketUrl = `${baseUrl}/api/socket/io`
+    const socketUrl = `http://localhost:3001/api/socket/io`
 
     return NextResponse.json({
       success: true,

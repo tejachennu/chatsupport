@@ -10,22 +10,20 @@ export function useSocket() {
 
   useEffect(() => {
     let socketInstance: Socket
-
     const initializeSocket = () => {
       console.log("Initializing socket connection...")
 
-      socketInstance = io({
-        path: "/api/socket/io",
-        addTrailingSlash: false,
-        transports: ["polling", "websocket"],
-        timeout: 20000,
-        reconnection: true,
-        reconnectionAttempts: 5,
-        reconnectionDelay: 1000,
-        reconnectionDelayMax: 5000,
-        forceNew: false,
-        autoConnect: true,
-      })
+      socketInstance = io("http://localhost:3001", {
+  transports: ["polling", "websocket"],
+  timeout: 20000,
+  reconnection: true,
+  reconnectionAttempts: 5,
+  reconnectionDelay: 1000,
+  reconnectionDelayMax: 5000,
+  forceNew: false,
+  autoConnect: true,
+})
+
 
       socketInstance.on("connect", () => {
         console.log("Connected to Socket.IO server:", socketInstance.id)
@@ -37,7 +35,6 @@ export function useSocket() {
         console.log("Disconnected from Socket.IO server:", reason)
         setIsConnected(false)
         if (reason === "io server disconnect") {
-          // Server disconnected, try to reconnect
           socketInstance.connect()
         }
       })
